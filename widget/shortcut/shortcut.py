@@ -1,32 +1,40 @@
 #!python3
-import appex, ui
-import os, re, requests, json
-import pickle
+import appex, ui, dialogs
+import sys, os, re, requests, json
+import pickle, time
+from threading import Thread
 
 WIDGET_RECT = (0, 0, 600, 600)
-REMARK_NAME = 'remark.txt'
 
 class EnvParam:
 	def __init__(self, file_name='env.db'):
 		self.env = {}
 		self.file_name = file_name
-		self.load()
+		self.f = None
 
 	def load(self):
 		try:
-			with open(self.file_name, 'rb') as f:
-				self.env = pickle.load(f)
+			self.f = open(self.file_name, 'rb')
+			self.env = pickle.load(self.f)
+			self.close()
 		except:
 			self.env = {}
 		return self
 
 	def save(self):
-		with open(self.file_name, 'wb') as f:
-			pickle.dump(self.env, f)
+		self.f = open(self.file_name, 'wb')
+		pickle.dump(self.env, self.f)
+		self.close()
+		return
+
+	def close(self):
+		if self.f is not None:
+			self.f.close()
+			self.f = None
 		return self
 
-	def get(self, param_name='default'):
-		return self.env[param_name] if param_name in self.env else None
+	def get(self, param_name='default', default=None):
+		return self.env[param_name] if param_name in self.env else default
 
 	def put(self, param, param_name='default'):
 		self.env[param_name] = param
@@ -40,6 +48,50 @@ class EnvParam:
 	def clear(self):
 		self.env = {}
 		return self
+
+class DataRt:
+	def __init__(self, date, time, code, open, pre_close, new, high, low, volume, amount,
+				 b1v, b1n, b2v, b2n, b3v, b3n, b4v, b4n, b5v, b5n,
+				 s1v, s1n, s2v, s2n, s3v, s3n, s4v, s4n, s5v, s5n):
+			self.date, self.time = int(date), int(time)
+			self.open, self.pre_close = float(open), float(pre_close)
+			self.high, self.low = float(high), float(low)
+			self.code, self.new = int(code), float(new)
+			self.volume, self.amount = int(volume), float(amount)
+			self.b1n, self.b1v, self.s1n, self.s1v = int(b1n), float(b1v), int(s1n), float(s1v)
+			self.b2n, self.b2v, self.s2n, self.s2v = int(b2n), float(b2v), int(s2n), float(s2v)
+			self.b3n, self.b3v, self.s3n, self.s3v = int(b3n), float(b3v), int(s3n), float(s3v)
+			self.b4n, self.b4v, self.s4n, self.s4v = int(b4n), float(b4v), int(s4n), float(s4v)
+			self.b5n, self.b5v, self.s5n, self.s5v = int(b5n), float(b5v), int(s5n), float(s5v)
+
+def get_stock_value(stocks_list):
+	res = []
+	for i in range(0, len(stocks_list), 256):
+		try:
+			r = requests.get(
+				'http://hq.sinajs.cn/?list={}'.format(','.join(stocks_list[i:min(len(stocks_list), i + 256)])), timeout=5)
+			ret = r.content.decode(encoding='gbk')
+			for line in ret.strip().split('\n'):
+				try:
+					context = line.split('"')
+					p = context[1].split(',')
+					res.append(
+						DataRt(
+							date=p[30][2:4] + p[30][5:7] + p[30][8:10],
+							time=p[31][0:2] + p[31][3:5] + p[31][6:8],
+							open=p[1], pre_close=p[2],
+							code=context[0][-7:-1], new=p[3], high=p[4], low=p[5], volume=p[8], amount=p[9],
+							b1v=p[11], b1n=p[10], b2v=p[13], b2n=p[12], b3v=p[15], b3n=p[14], b4v=p[17], b4n=p[16],
+							b5v=p[19], b5n=p[18],
+							s1v=p[21], s1n=p[20], s2v=p[23], s2n=p[22], s3v=p[25], s3n=p[24], s4v=p[27], s4n=p[26],
+							s5v=p[29], s5n=p[28],
+						)
+					)
+				except IndexError:
+					pass
+		except:
+			pass
+	return res
 
 def get_script_path(filename):
 	return 'pythonista://'+os.getcwd().split('Documents/')[-1]+'/'+filename
@@ -72,7 +124,7 @@ def create_buttons(ui_view):
 	BX, BY = (180, 285)
 	shortcus = [
 		BottonCommon('车', 'yitongxing://', (BX+110, BY+60, 90, 55), '#5e96ff', 'iob:ios7_bolt_32', 20),
-		BottonCommon('', 'tel://10010', (BX+110, BY+120, 90, 55), '#ff5a19', 'typb:Telephone', 20),
+		BottonCommon('', 'tel://888888', (BX+110, BY+120, 90, 55), '#ff5a19', 'typb:Telephone', 20),
 		BottonCommon('', 'fmip1://', (BX+110, BY+180, 90, 54), '#1e4c38', 'typb:Relocate', 20),
 		BottonCommon('扫', 'weixin://scanqrcode', (BX, BY+60, 90, 55), '#0fe24b', 'iow:chatbubbles_32', 20),
 		BottonCommon('扫', 'alipayqr://platformapi/startapp?saId=10000007', (BX, BY+120, 90, 55), '#42aeff', 'iob:social_bitcoin_32', 20),
@@ -99,7 +151,10 @@ def create_buttons(ui_view):
 	ui_view.layout_cbs.append(layout)
 
 def create_weather(ui_view):
-	now = ui.Button(title='', bg_color='#5e96ff', font=('Helvetica Neue', 18))
+	def edit_location(sender):
+		import webbrowser
+		webbrowser.open(get_script_path('shortcut.py?action=run&args=edit_weather_location'))
+	now = ui.Button(title='', bg_color='#5e96ff', font=('Helvetica Neue', 18), action=edit_location)
 	now.tint_color = '#fff'
 	now.corner_radius = 10
 	# now.font =
@@ -108,7 +163,7 @@ def create_weather(ui_view):
 
 	after = ui.TextView(title='', editable=False, selectable=False, bg_color='#686868', font=('Helvetica Neue', 10))
 	after.text_color = '#fff'
-	after.alignment = ui.ALIGN_CENTER
+	after.alignment = ui.ALIGN_LEFT
 	after.corner_radius = 12
 	ui_view.add_subview(after)
 	ui_view.weather['after'] = after
@@ -133,17 +188,94 @@ def create_weather(ui_view):
 			res = ''
 			for i in range(3):
 				c = j['data'][i]
-				res += '{:7s} {:8s} {}'.format(c['day'], '{}~{}'.format(c['tem2'], c['tem1']), c['wea'])
+				res += ' {:7s} {:8s} {}'.format(c['day'], '{}~{}'.format(c['tem2'], c['tem1']), c['wea'])
 				res += '\n'
 			return res
 		except:
 			return '今天天气好晴朗～处处好风光'
 
 	def layout(ui_view):
+		def update_weather_thhread(ui_view, env):
+			location = env.get('weather_location', '北京')
+			weather_now = location+' '+get_weather_now(location)
+			weather_after = get_weather_after(location)
+			ui_view.weather['now'].title = weather_now
+			ui_view.weather['after'].text = weather_after
+			env.put(weather_now, 'weather_now'). \
+				put(weather_after, 'weather_after').save()
+		env = EnvParam().load()
+		weather_now = env.get('weather_now')
+		weather_after = env.get('weather_after')
+		weather_timestamp = env.get('weather_timestamp')
+		time_now = time.time()
 		ui_view.weather['now'].frame = ui.Rect(10, 10, 380, 40)
-		ui_view.weather['now'].title = get_weather_now('北京')
 		ui_view.weather['after'].frame = ui.Rect(180, 60, 200, 50)
-		ui_view.weather['after'].text = get_weather_after('北京')
+		ui_view.weather['now'].title = weather_now if weather_now is not None else 'Loading'
+		ui_view.weather['after'].text = weather_after if weather_after is not None else 'Loading'
+		if weather_timestamp is None or time_now - weather_timestamp > 5:
+			env.put(time_now, 'weather_timestamp').save()
+			Thread(target=update_weather_thhread, args=[ui_view, env]).start()
+	ui_view.layout_cbs.append(layout)
+
+def create_stock(ui_view):
+	stock = ui.TextView(title='', bg_color='#999999', font=('Helvetica Neue', 12))
+	stock.text_color = '#fff'
+	stock.alignment = ui.ALIGN_LEFT
+	stock.corner_radius = 12
+	ui_view.add_subview(stock)
+	ui_view.stock = stock
+
+	class MyTextViewDelegate (object):
+		def textview_should_begin_editing(self, textview):
+			import webbrowser
+			webbrowser.open(get_script_path('shortcut.py?action=run&args=edit_stock_list'))
+			return False
+		def textview_did_begin_editing(self, textview):
+			pass
+		def textview_did_end_editing(self, textview):
+			pass
+		def textview_should_change(self, textview, range, replacement):
+			return False
+		def textview_did_change(self, textview):
+			pass
+		def textview_did_change_selection(self, textview):
+			pass
+	stock.delegate = MyTextViewDelegate()
+
+	def get_stock_str(stock_list):
+		ret = ''
+		try:
+			if len(stock_list) == 0: raise
+			data = get_stock_value(stock_list)
+			if len(data) == 0: raise
+			for s in data:
+				t = str(s.date * 1000000 + s.time)[-10:-2]
+				ret += '  {:06d}  {}  {}\n     {:5.2f}  {:5.2f}  {:5.2f}%\n'.format(
+					s.code, '{}-{} {}:{}'.format(t[:2], t[2:4], t[4:6], t[6:8]),
+					' ⬇' if s.new - s.pre_close < 0 else ' ⬆',
+					s.new, s.new - s.pre_close,
+					(s.new - s.pre_close) / s.pre_close * 100)
+		except:
+			ret = '龙行龘龘\n畸角旮旯'
+		finally:
+			return ret
+
+	def layout(ui_view):
+		def update_stock_thhread(ui_view, env):
+			l = env.get('stock_list')
+			l = [] if l is None else [x.strip() for x in l.strip().split('\n') if len(x.strip()) > 0]
+			stock_str = get_stock_str(l)
+			ui_view.stock.text = stock_str
+			env.put(stock_str, 'stock_str').save()
+		env = EnvParam().load()
+		stock_str = env.get('stock_str')
+		stock_timestamp = env.get('stock_timestamp')
+		time_now = time.time()
+		ui_view.stock.frame = ui.Rect(10, 60, 160, 210)
+		ui_view.stock.text = stock_str if stock_str is not None else 'Loading'
+		if stock_timestamp is None or time_now - stock_timestamp > 5:
+			env.put(time_now, 'stock_timestamp').save()
+			Thread(target=update_stock_thhread, args=[ui_view, env]).start()
 	ui_view.layout_cbs.append(layout)
 
 def create_remark(ui_view):
@@ -158,7 +290,7 @@ def create_remark(ui_view):
 	class MyTextViewDelegate (object):
 		def textview_should_begin_editing(self, textview):
 			import webbrowser
-			webbrowser.open(get_script_path(REMARK_NAME))
+			webbrowser.open(get_script_path('shortcut.py?action=run&args=edit_remark'))
 			return False
 		def textview_did_begin_editing(self, textview):
 			pass
@@ -173,9 +305,8 @@ def create_remark(ui_view):
 	view.delegate = MyTextViewDelegate()
 
 	def layout(ui_view):
-		if not os.path.exists('remark.txt'):
-			open(REMARK_NAME, 'w').close()
-		ui_view.remark.text = ''.join(open(REMARK_NAME, 'r', encoding='utf-8').readlines())
+		text = EnvParam().load().get('remark')
+		ui_view.remark.text = ''.join(text) if text is not None else ''
 	ui_view.layout_cbs.append(layout)
 
 class LauncherView_tab1(ui.View):
@@ -186,10 +317,12 @@ class LauncherView_tab1(ui.View):
 		self.buttons = []
 		self.remark = None
 		self.weather = {}
+		self.stock = None
 
 		create_buttons(self)
 		create_remark(self)
 		create_weather(self)
+		create_stock(self)
 
 	def layout(self):
 		for cb in self.layout_cbs:
@@ -235,4 +368,23 @@ def main():
 		appex.set_widget_view(v)
 
 if __name__ == '__main__':
-	main()
+	if len(sys.argv) > 1 and sys.argv[1].strip() == 'edit_remark':
+		env = EnvParam().load()
+		text = env.get('remark')
+		res = dialogs.text_dialog(text=text if text is not None else '')
+		if res is not None:
+			env.put(res, 'remark').save()
+	elif len(sys.argv) > 1 and sys.argv[1].strip() == 'edit_stock_list':
+		env = EnvParam().load()
+		text = env.get('stock_list')
+		res = dialogs.text_dialog(text=text if text is not None else '')
+		if res is not None:
+			env.put(res, 'stock_list').save()
+	elif len(sys.argv) > 1 and sys.argv[1].strip() == 'edit_weather_location':
+		env = EnvParam().load()
+		text = env.get('weather_location')
+		res = dialogs.text_dialog(text=text if text is not None else '')
+		if res is not None:
+			env.put(res, 'weather_location').save()
+	else:
+		main()
