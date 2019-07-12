@@ -2,51 +2,73 @@
 import appex, ui, dialogs
 import sys, os, re, requests, json
 import pickle, time
-from threading import Thread
+from threading import Thread, Lock
 
 WIDGET_RECT = (0, 0, 600, 600)
 
 class EnvParam:
-	def __init__(self, file_name='env.db'):
-		self.env = {}
-		self.file_name = file_name
-		self.f = None
+	env = None
+	lock = None
+	file_name = None
+	reload_timestamp = 0
 
-	def load(self):
-		try:
-			self.f = open(self.file_name, 'rb')
-			self.env = pickle.load(self.f)
-			self.close()
-		except:
-			self.env = {}
+	def __init__(self, file_name='env.db'):
+		if EnvParam.lock is None:
+			EnvParam.lock = Lock()
+			EnvParam.lock.acquire()
+			EnvParam.file_name = file_name
+			f = open(EnvParam.file_name, 'rb')
+			try:
+				EnvParam.env = pickle.load(f)
+			except:
+				EnvParam.env = {}
+			f.close()
+			EnvParam.lock.release()
+
+	def reload(self):
+		if time.time() - EnvParam.reload_timestamp > 2:
+			EnvParam.reload_timestamp = time.time()
+			del EnvParam.lock
+			EnvParam.lock = None
+			self.__init__()
+		return self
+
+	def backup(self):
+		for i in range(3):
+			f = open(EnvParam.file_name, 'rb')
+			try:
+				env = pickle.load(f)
+				f.close()
+			except:
+				time.sleep(0.1)
+				continue
+			if len(env) > 0:
+				with open(EnvParam.file_name+'.bk', 'wb') as f:
+					pickle.dump(env, f)
+					f.close()
+				break
 		return self
 
 	def save(self):
-		self.f = open(self.file_name, 'wb')
-		pickle.dump(self.env, self.f)
-		self.close()
-		return
-
-	def close(self):
-		if self.f is not None:
-			self.f.close()
-			self.f = None
+		assert(self.lock is not None)
+		self.lock.acquire()
+		f = open(EnvParam.file_name, 'wb')
+		pickle.dump(self.env, f)
+		f.flush()
+		f.close()
+		self.lock.release()
 		return self
 
 	def get(self, param_name='default', default=None):
-		return self.env[param_name] if param_name in self.env else default
+		self.lock.acquire()
+		res = self.env[param_name] if param_name in self.env else default
+		self.lock.release()
+		return res
 
 	def put(self, param, param_name='default'):
+		self.lock.acquire()
 		self.env[param_name] = param
-		return self
-
-	def delete(self, param_name='default'):
-		if param_name in self.env:
-			del (self.env[param_name])
-		return self
-
-	def clear(self):
-		self.env = {}
+		self.lock.release()
 		return self
 
 class DataRt:
@@ -157,11 +179,10 @@ def create_weather(ui_view):
 	now = ui.Button(title='', bg_color='#5e96ff', font=('Helvetica Neue', 18), action=edit_location)
 	now.tint_color = '#fff'
 	now.corner_radius = 10
-	# now.font =
 	ui_view.add_subview(now)
 	ui_view.weather['now'] = now
 
-	after = ui.TextView(title='', editable=False, selectable=False, bg_color='#686868', font=('Helvetica Neue', 10))
+	after = ui.TextView(title='', editable=False, selectable=False, bg_color='#999999', font=('Helvetica Neue', 10))
 	after.text_color = '#fff'
 	after.alignment = ui.ALIGN_LEFT
 	after.corner_radius = 12
@@ -176,6 +197,8 @@ def create_weather(ui_view):
 			temp = ' {} {}℃ {} {}'.format(
 				j['wea'], j['tem'], j['win'] + j['win_speed'], j['air_level']
 			)
+			temp = temp.replace('晴', '☀️').replace('多云', '🌥').replace('阴', '☁️').replace('小雨', '🌦').\
+				replace('中雨', '🌧').replace('大雨', '⛈').replace('雷阵雨', '🌩').replace('雪', '🌨')
 			return '{}'.format(temp)
 		except:
 			return '今天天气好晴朗～处处好风光'
@@ -203,7 +226,7 @@ def create_weather(ui_view):
 			ui_view.weather['after'].text = weather_after
 			env.put(weather_now, 'weather_now'). \
 				put(weather_after, 'weather_after').save()
-		env = EnvParam().load()
+		env = EnvParam()
 		weather_now = env.get('weather_now')
 		weather_after = env.get('weather_after')
 		weather_timestamp = env.get('weather_timestamp')
@@ -252,7 +275,7 @@ def create_stock(ui_view):
 				t = str(s.date * 1000000 + s.time)[-10:-2]
 				ret += '  {:06d}  {}  {}\n     {:5.2f}  {:5.2f}  {:5.2f}%\n'.format(
 					s.code, '{}-{} {}:{}'.format(t[:2], t[2:4], t[4:6], t[6:8]),
-					' ⬇' if s.new - s.pre_close < 0 else ' ⬆',
+					' 🛩' if s.new - s.pre_close < 0 else ' 🚀',
 					s.new, s.new - s.pre_close,
 					(s.new - s.pre_close) / s.pre_close * 100)
 		except:
@@ -267,7 +290,7 @@ def create_stock(ui_view):
 			stock_str = get_stock_str(l)
 			ui_view.stock.text = stock_str
 			env.put(stock_str, 'stock_str').save()
-		env = EnvParam().load()
+		env = EnvParam()
 		stock_str = env.get('stock_str')
 		stock_timestamp = env.get('stock_timestamp')
 		time_now = time.time()
@@ -279,7 +302,7 @@ def create_stock(ui_view):
 	ui_view.layout_cbs.append(layout)
 
 def create_remark(ui_view):
-	view = ui.TextView(frame=ui.Rect(180, 120, 200, 150), bg_color='#cccccc')
+	view = ui.TextView(frame=ui.Rect(180, 120, 200, 150), bg_color='#aaaaaa')
 	view.font = ('Times New Roman', 16)
 	view.alignment = ui.ALIGN_LEFT
 	view.scroll_enabled = False
@@ -305,7 +328,7 @@ def create_remark(ui_view):
 	view.delegate = MyTextViewDelegate()
 
 	def layout(ui_view):
-		text = EnvParam().load().get('remark')
+		text = EnvParam().get('remark')
 		ui_view.remark.text = ''.join(text) if text is not None else ''
 	ui_view.layout_cbs.append(layout)
 
@@ -325,6 +348,7 @@ class LauncherView_tab1(ui.View):
 		create_stock(self)
 
 	def layout(self):
+		EnvParam().reload()
 		for cb in self.layout_cbs:
 			cb(self)
 
@@ -369,19 +393,19 @@ def main():
 
 if __name__ == '__main__':
 	if len(sys.argv) > 1 and sys.argv[1].strip() == 'edit_remark':
-		env = EnvParam().load()
+		env = EnvParam().backup()
 		text = env.get('remark')
 		res = dialogs.text_dialog(text=text if text is not None else '')
 		if res is not None:
 			env.put(res, 'remark').save()
 	elif len(sys.argv) > 1 and sys.argv[1].strip() == 'edit_stock_list':
-		env = EnvParam().load()
+		env = EnvParam().backup()
 		text = env.get('stock_list')
 		res = dialogs.text_dialog(text=text if text is not None else '')
 		if res is not None:
 			env.put(res, 'stock_list').save()
 	elif len(sys.argv) > 1 and sys.argv[1].strip() == 'edit_weather_location':
-		env = EnvParam().load()
+		env = EnvParam().backup()
 		text = env.get('weather_location')
 		res = dialogs.text_dialog(text=text if text is not None else '')
 		if res is not None:
