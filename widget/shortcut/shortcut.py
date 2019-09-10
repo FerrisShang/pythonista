@@ -191,11 +191,11 @@ def create_weather(ui_view):
 
 	def get_weather_now(city):
 		try:
-			url = 'https://www.tianqiapi.com/api/?version=v6&city=%s'
+			url = 'https://www.tianqiapi.com/api/?version=v6&appid=[appid]&appsecret=[appsecret]&city=%s'
 			html = requests.get(url % city, timeout=2).content.decode()
 			j = json.loads(html)
-			temp = ' {} {}℃ {} {}'.format(
-				j['wea'], j['tem'], j['win'] + j['win_speed'], j['air_level']
+			temp = ' {} {}℃ {} {} {}'.format(
+				j['wea'], j['tem'], j['humidity'], j['win'] + j['win_speed'], j['air_level']
 			)
 			temp = temp.replace('晴', '☀️').replace('多云', '🌥').replace('阴', '☁️').replace('小雨', '🌦').\
 				replace('中雨', '🌧').replace('大雨', '⛈').replace('雷阵雨', '🌩').replace('雪', '🌨')
@@ -205,7 +205,7 @@ def create_weather(ui_view):
 
 	def get_weather_after(city):
 		try:
-			url = 'https://www.tianqiapi.com/api/?version=v1&city=%s'
+			url = 'https://www.tianqiapi.com/api/?version=v1&appid=[appid]&appsecret=[appsecret]&city=%s'
 			html = requests.get(url % city, timeout=2).content.decode()
 			j = json.loads(html)
 			res = ''
@@ -224,20 +224,21 @@ def create_weather(ui_view):
 			weather_after = get_weather_after(location)
 			ui_view.weather['now'].title = weather_now
 			ui_view.weather['after'].text = weather_after
-			env.put(weather_now, 'weather_now'). \
-				put(weather_after, 'weather_after').save()
+			#env.put(weather_now, 'weather_now'). \
+			#	put(weather_after, 'weather_after').save()
 		env = EnvParam()
-		weather_now = env.get('weather_now')
-		weather_after = env.get('weather_after')
+		weather_now = None #env.get('weather_now')
+		weather_after = None #env.get('weather_after')
 		weather_timestamp = env.get('weather_timestamp')
 		time_now = time.time()
 		ui_view.weather['now'].frame = ui.Rect(10, 10, 380, 40)
 		ui_view.weather['after'].frame = ui.Rect(180, 60, 200, 50)
 		ui_view.weather['now'].title = weather_now if weather_now is not None else 'Loading'
 		ui_view.weather['after'].text = weather_after if weather_after is not None else 'Loading'
-		if weather_timestamp is None or time_now - weather_timestamp > 5:
-			env.put(time_now, 'weather_timestamp').save()
-			Thread(target=update_weather_thhread, args=[ui_view, env]).start()
+		#if weather_timestamp is None or time_now - weather_timestamp > 5:
+		#	env.put(time_now, 'weather_timestamp').save()
+		#	Thread(target=update_weather_thhread, args=[ui_view, env]).start()
+		Thread(target=update_weather_thhread, args=[ui_view, env]).start()
 	ui_view.layout_cbs.append(layout)
 
 def create_stock(ui_view):
@@ -289,16 +290,17 @@ def create_stock(ui_view):
 			l = [] if l is None else [x.strip() for x in l.strip().split('\n') if len(x.strip()) > 0]
 			stock_str = get_stock_str(l)
 			ui_view.stock.text = stock_str
-			env.put(stock_str, 'stock_str').save()
+			#env.put(stock_str, 'stock_str').save()
 		env = EnvParam()
 		stock_str = env.get('stock_str')
 		stock_timestamp = env.get('stock_timestamp')
 		time_now = time.time()
 		ui_view.stock.frame = ui.Rect(10, 60, 160, 210)
 		ui_view.stock.text = stock_str if stock_str is not None else 'Loading'
-		if stock_timestamp is None or time_now - stock_timestamp > 5:
-			env.put(time_now, 'stock_timestamp').save()
-			Thread(target=update_stock_thhread, args=[ui_view, env]).start()
+		#if stock_timestamp is None or time_now - stock_timestamp > 5:
+		#	env.put(time_now, 'stock_timestamp').save()
+		#	Thread(target=update_stock_thhread, args=[ui_view, env]).start()
+		Thread(target=update_stock_thhread, args=[ui_view, env]).start()
 	ui_view.layout_cbs.append(layout)
 
 def create_remark(ui_view):
@@ -386,7 +388,7 @@ def main():
 	widget_name = __file__ + str(os.stat(__file__).st_mtime)
 	v = appex.get_widget_view()
 
-	if v is None or v.name != widget_name:
+	if True or v is None or v.name != widget_name:
 		v = LauncherView_main()
 		v.name = widget_name
 		appex.set_widget_view(v)
