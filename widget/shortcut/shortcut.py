@@ -4,7 +4,7 @@ import sys, os, re, requests, json
 import pickle, time
 from threading import Thread, Lock
 
-WIDGET_RECT = (0, 0, 600, 600)
+WIDGET_RECT = (0, 0, 600, 320)
 
 class EnvParam:
 	env = None
@@ -232,7 +232,7 @@ def create_weather(ui_view):
 		weather_timestamp = env.get('weather_timestamp')
 		time_now = time.time()
 		ui_view.weather['now'].frame = ui.Rect(10, 10, 380, 40)
-		ui_view.weather['after'].frame = ui.Rect(180, 60, 200, 50)
+		ui_view.weather['after'].frame = ui.Rect(180, 60, 200, 60)
 		ui_view.weather['now'].title = weather_now if weather_now is not None else 'Loading'
 		ui_view.weather['after'].text = weather_after if weather_after is not None else 'Loading'
 		#if weather_timestamp is None or time_now - weather_timestamp > 5:
@@ -292,10 +292,10 @@ def create_stock(ui_view):
 			ui_view.stock.text = stock_str
 			#env.put(stock_str, 'stock_str').save()
 		env = EnvParam()
-		stock_str = env.get('stock_str')
+		stock_str = None  # env.get('stock_str')
 		stock_timestamp = env.get('stock_timestamp')
 		time_now = time.time()
-		ui_view.stock.frame = ui.Rect(10, 60, 160, 210)
+		ui_view.stock.frame = ui.Rect(10, 60, 160, 250)
 		ui_view.stock.text = stock_str if stock_str is not None else 'Loading'
 		#if stock_timestamp is None or time_now - stock_timestamp > 5:
 		#	env.put(time_now, 'stock_timestamp').save()
@@ -304,7 +304,7 @@ def create_stock(ui_view):
 	ui_view.layout_cbs.append(layout)
 
 def create_remark(ui_view):
-	view = ui.TextView(frame=ui.Rect(180, 120, 200, 150), bg_color='#aaaaaa')
+	view = ui.TextView(frame=ui.Rect(180, 130, 200, 180), bg_color='#aaaaaa')
 	view.font = ('Times New Roman', 16)
 	view.alignment = ui.ALIGN_LEFT
 	view.scroll_enabled = False
@@ -344,7 +344,7 @@ class LauncherView_tab1(ui.View):
 		self.weather = {}
 		self.stock = None
 
-		create_buttons(self)
+		# create_buttons(self)
 		create_remark(self)
 		create_weather(self)
 		create_stock(self)
