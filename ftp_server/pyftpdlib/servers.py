@@ -513,16 +513,16 @@ class ThreadedFTPServer(_SpawnerBase):
 
 
 if os.name == 'posix':
-    import multiprocessing
-
-    __all__ += ['MultiprocessFTPServer']
-
-    class MultiprocessFTPServer(_SpawnerBase):
-        """A modified version of base FTPServer class which spawns a
-        process every time a new connection is established.
-        """
-        _lock = multiprocessing.Lock()
-        _exit = multiprocessing.Event()
-
-        def _start_task(self, *args, **kwargs):
-            return multiprocessing.Process(*args, **kwargs)
+    try:
+        import multiprocessing
+        class MultiprocessFTPServer(_SpawnerBase):
+            """A modified version of base FTPServer class which spawns a
+            process every time a new connection is established.
+            """
+            _lock = multiprocessing.Lock()
+            _exit = multiprocessing.Event()
+            def _start_task(self, *args, **kwargs):
+                return multiprocessing.Process(*args, **kwargs)
+        __all__ += ['MultiprocessFTPServer']
+    except:
+        pass

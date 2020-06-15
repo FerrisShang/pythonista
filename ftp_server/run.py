@@ -20,7 +20,7 @@ def main():
     authorizer.add_user('user', 'user', './../..', perm='elradfmwMT')
     handler = FTPHandler
     handler.authorizer = authorizer
-    server = FTPServer(('', 21), handler)
+    server = FTPServer((get_local_ip(), 2121), handler)
     server.serve_forever()
 
 if __name__ == "__main__":
